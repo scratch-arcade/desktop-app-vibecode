@@ -32,6 +32,7 @@ desktop-app-vibecode/
 │  └─ ArcadeController/
 │     └─ ArcadeController.ino
 ├─ games/
+├─ imports/
 ├─ scripts/
 │  ├─ build-all.bat
 │  ├─ dev-start.bat
@@ -72,6 +73,13 @@ desktop-app-vibecode/
     - `projectUrl`: URL du projet (si `url`)
 
 Le backend utilise `@turbowarp/packager` et force un export `text/html`.
+
+### Admin borne sans souris (recommande)
+
+1. Deposer un fichier `.sb3` ou `.sb2` dans `imports/`
+2. Dans le launcher: entrer la sequence `↑ ↑ ↓ ↓ ← → ← → Enter`
+3. Appuyer sur `P` pour packager automatiquement le dernier fichier de `imports/`
+4. Appuyer sur `L` pour verrouiller le mode admin
 
 ## Installation
 

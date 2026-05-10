@@ -8,6 +8,7 @@ const rootDir = path.resolve(__dirname, "..", "..");
 export const config = {
   port: Number(process.env.PORT || 3030),
   gamesDir: path.resolve(rootDir, "games"),
+  importsDir: path.resolve(rootDir, "imports"),
   frontendDistDir: path.resolve(rootDir, "frontend", "dist"),
   dataDir: path.resolve(rootDir, "backend", "data"),
   frontendUrl: process.env.FRONTEND_URL || "http://localhost:3030",

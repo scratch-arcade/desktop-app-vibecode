@@ -76,3 +76,35 @@ export async function packageScratchProjectToHtml({ projectBuffer, baseName, gam
   await fs.writeFile(outputPath, Buffer.from(result.data));
   return { filename, outputPath };
 }
+
+export async function getLatestImportProject(importsDir) {
+  await fs.mkdir(importsDir, { recursive: true });
+  const entries = await fs.readdir(importsDir, { withFileTypes: true });
+  const projectFiles = entries
+    .filter((entry) => entry.isFile())
+    .map((entry) => {
+      const ext = path.extname(entry.name).toLowerCase();
+      return { name: entry.name, ext };
+    })
+    .filter((item) => item.ext === ".sb3" || item.ext === ".sb2");
+
+  if (!projectFiles.length) return null;
+
+  const withStats = await Promise.all(
+    projectFiles.map(async (file) => {
+      const fullPath = path.join(importsDir, file.name);
+      const stat = await fs.stat(fullPath);
+      return { ...file, fullPath, mtimeMs: stat.mtimeMs };
+    })
+  );
+
+  withStats.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const latest = withStats[0];
+  const buffer = await fs.readFile(latest.fullPath);
+
+  return {
+    buffer,
+    filename: latest.name,
+    suggestedName: sanitizeBaseName(latest.name)
+  };
+}

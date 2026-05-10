@@ -6,6 +6,8 @@ const BOOT_DURATION_MS = 2800;
 const APP_VERSION = "v0.4.0";
 const GAME_LOAD_TIMEOUT_MS = 15000;
 const PACKAGER_REPO_URL = "https://github.com/TurboWarp/packager";
+const ADMIN_UNLOCK_SEQUENCE = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "Enter"];
+const ADMIN_KIOSK_PASSWORD = "arcade-admin";
 
 function playMenuTick() {
   playTone(680, 0.04, 0.03, "square");
@@ -45,6 +47,8 @@ export default function App() {
   const [adminProjectFile, setAdminProjectFile] = useState(null);
   const [adminPackaging, setAdminPackaging] = useState(false);
   const [adminMessage, setAdminMessage] = useState("");
+  const [adminUnlocked, setAdminUnlocked] = useState(false);
+  const [adminSeqIndex, setAdminSeqIndex] = useState(0);
   const [favorites, setFavorites] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
@@ -116,6 +120,21 @@ export default function App() {
       }
 
       if (loading || !games.length) return;
+      if (!adminUnlocked) {
+        const expectedKey = ADMIN_UNLOCK_SEQUENCE[adminSeqIndex];
+        if (event.key === expectedKey) {
+          const next = adminSeqIndex + 1;
+          setAdminSeqIndex(next);
+          if (next === ADMIN_UNLOCK_SEQUENCE.length) {
+            setAdminUnlocked(true);
+            setAdminSeqIndex(0);
+            setAdminMessage("Mode admin debloque.");
+            playTone(820, 0.08, 0.05);
+          }
+        } else if (event.key !== "Shift" && event.key !== "Control" && event.key !== "Alt") {
+          setAdminSeqIndex(0);
+        }
+      }
       if (event.key === "ArrowDown") {
         event.preventDefault();
         playMenuTick();
@@ -136,6 +155,13 @@ export default function App() {
       } else if (event.key.toLowerCase() === "a") {
         event.preventDefault();
         setShowAdminModal(true);
+      } else if (adminUnlocked && event.key.toLowerCase() === "p") {
+        event.preventDefault();
+        quickPackageFromInbox();
+      } else if (adminUnlocked && event.key.toLowerCase() === "l") {
+        event.preventDefault();
+        setAdminUnlocked(false);
+        setAdminMessage("Mode admin verrouille.");
       }
     };
 
@@ -279,6 +305,30 @@ export default function App() {
     }
   }
 
+  async function quickPackageFromInbox() {
+    if (adminPackaging) return;
+    setAdminPackaging(true);
+    setAdminMessage("Packaging inbox en cours...");
+    try {
+      const response = await fetch(`${API_BASE}/admin/package-inbox`, {
+        method: "POST",
+        headers: {
+          "x-admin-password": ADMIN_KIOSK_PASSWORD
+        }
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) {
+        throw new Error(data.error || "Packaging inbox impossible.");
+      }
+      setAdminMessage(`Import OK: ${data?.game?.title || data?.source || "jeu ajoute"}`);
+      await fetchGames();
+    } catch (err) {
+      setAdminMessage(err.message);
+    } finally {
+      setAdminPackaging(false);
+    }
+  }
+
   function toggleFavorite(gameId) {
     setFavorites((current) => (current.includes(gameId) ? current.filter((id) => id !== gameId) : [...current, gameId]));
   }
@@ -408,6 +458,12 @@ export default function App() {
                   <p><span className="kbd">F</span>Favori</p>
                   <p><span className="kbd">R/F5</span>Actualiser liste</p>
                   <p><span className="kbd">A</span>Ouvrir admin packager</p>
+                  <h3>Admin borne sans souris</h3>
+                  <p><span className="kbd">↑↑↓↓←→←→+Enter</span>Debloquer admin</p>
+                  <p><span className="kbd">P</span>Packager dernier /imports</p>
+                  <p><span className="kbd">L</span>Reverrouiller admin</p>
+                  {adminUnlocked && <p><span className="kbd">Etat</span>Admin actif</p>}
+                  {!!adminMessage && <p><span className="kbd">Info</span>{adminMessage}</p>}
                 </aside>
               </div>
             )}

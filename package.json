@@ -1,0 +1,15 @@
+{
+  "name": "desktop-app-vibecode",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "backend",
+    "frontend"
+  ],
+  "scripts": {
+    "install:all": "npm install --workspaces",
+    "dev": "scripts\\dev-start.bat",
+    "build": "scripts\\build-all.bat",
+    "start:arcade": "scripts\\start-arcade.bat"
+  }
+}

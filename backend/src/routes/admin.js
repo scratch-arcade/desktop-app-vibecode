@@ -21,6 +21,14 @@ adminRouter.get("/admin/info", (_req, res) => {
   });
 });
 
+adminRouter.post("/admin/verify", (req, res) => {
+  const providedPassword = String(req.headers["x-admin-password"] || "");
+  if (providedPassword !== config.adminPassword) {
+    return res.status(401).json({ ok: false, error: "Mot de passe admin invalide." });
+  }
+  return res.json({ ok: true });
+});
+
 adminRouter.post("/admin/package", upload.single("projectFile"), async (req, res, next) => {
   try {
     const providedPassword = String(req.headers["x-admin-password"] || "");

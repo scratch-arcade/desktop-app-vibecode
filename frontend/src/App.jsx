@@ -6,8 +6,6 @@ const BOOT_DURATION_MS = 2800;
 const APP_VERSION = "v0.4.0";
 const GAME_LOAD_TIMEOUT_MS = 15000;
 const PACKAGER_REPO_URL = "https://github.com/TurboWarp/packager";
-const ADMIN_UNLOCK_SEQUENCE = ["ArrowUp", "ArrowUp", "ArrowDown", "ArrowDown", "ArrowLeft", "ArrowRight", "ArrowLeft", "ArrowRight", "Enter"];
-const ADMIN_KIOSK_PASSWORD = "arcade-admin";
 
 function playMenuTick() {
   playTone(680, 0.04, 0.03, "square");
@@ -47,8 +45,7 @@ export default function App() {
   const [adminProjectFile, setAdminProjectFile] = useState(null);
   const [adminPackaging, setAdminPackaging] = useState(false);
   const [adminMessage, setAdminMessage] = useState("");
-  const [adminUnlocked, setAdminUnlocked] = useState(false);
-  const [adminSeqIndex, setAdminSeqIndex] = useState(0);
+  const [adminAuthenticated, setAdminAuthenticated] = useState(false);
   const [favorites, setFavorites] = useState(() => {
     try {
       return JSON.parse(localStorage.getItem(FAVORITES_KEY) || "[]");
@@ -75,6 +72,15 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites));
   }, [favorites]);
+
+  useEffect(() => {
+    if (showAdminModal) {
+      document.body.classList.add("allow-mouse");
+    } else {
+      document.body.classList.remove("allow-mouse");
+    }
+    return () => document.body.classList.remove("allow-mouse");
+  }, [showAdminModal]);
 
   function handleInGameHotkey(event) {
     const key = event.key.toLowerCase();
@@ -114,27 +120,22 @@ export default function App() {
 
   useEffect(() => {
     const onKeyDown = (event) => {
+      if (event.altKey && event.shiftKey) {
+        event.preventDefault();
+        setShowAdminModal(true);
+        return;
+      }
+
       if (activeGame) {
         handleInGameHotkey(event);
+        if (event.key.toLowerCase() === "g") {
+          event.preventDefault();
+          tryAutoStartScratch(gameFrameRef.current);
+        }
         return;
       }
 
       if (loading || !games.length) return;
-      if (!adminUnlocked) {
-        const expectedKey = ADMIN_UNLOCK_SEQUENCE[adminSeqIndex];
-        if (event.key === expectedKey) {
-          const next = adminSeqIndex + 1;
-          setAdminSeqIndex(next);
-          if (next === ADMIN_UNLOCK_SEQUENCE.length) {
-            setAdminUnlocked(true);
-            setAdminSeqIndex(0);
-            setAdminMessage("Mode admin debloque.");
-            playTone(820, 0.08, 0.05);
-          }
-        } else if (event.key !== "Shift" && event.key !== "Control" && event.key !== "Alt") {
-          setAdminSeqIndex(0);
-        }
-      }
       if (event.key === "ArrowDown") {
         event.preventDefault();
         playMenuTick();
@@ -152,16 +153,6 @@ export default function App() {
       } else if (event.key.toLowerCase() === "r" || event.key === "F5") {
         event.preventDefault();
         fetchGames();
-      } else if (event.key.toLowerCase() === "a") {
-        event.preventDefault();
-        setShowAdminModal(true);
-      } else if (adminUnlocked && event.key.toLowerCase() === "p") {
-        event.preventDefault();
-        quickPackageFromInbox();
-      } else if (adminUnlocked && event.key.toLowerCase() === "l") {
-        event.preventDefault();
-        setAdminUnlocked(false);
-        setAdminMessage("Mode admin verrouille.");
       }
     };
 
@@ -215,20 +206,53 @@ export default function App() {
   }
 
   function tryAutoStartScratch(iframe) {
+    if (!iframe) return;
     bindIframeHotkeys(iframe);
-    try {
+
+    const attemptStart = () => {
       const frameWindow = iframe.contentWindow;
       const frameDocument = frameWindow?.document;
-      const canvas = frameDocument?.querySelector("canvas");
-      if (!canvas) return;
-      const clickEvent = new frameWindow.MouseEvent("click", {
-        bubbles: true,
-        cancelable: true,
-        clientX: 24,
-        clientY: 24
-      });
-      canvas.dispatchEvent(clickEvent);
-      window.focus();
+      if (!frameWindow || !frameDocument) return false;
+
+      const greenFlag =
+        frameDocument.querySelector("[class*='green-flag']") ||
+        frameDocument.querySelector("[data-control='start']") ||
+        frameDocument.querySelector("button[title*='green flag' i]");
+      if (greenFlag) {
+        greenFlag.dispatchEvent(new frameWindow.MouseEvent("click", { bubbles: true, cancelable: true }));
+        frameWindow.focus();
+        window.focus();
+        return true;
+      }
+
+      const canvas = frameDocument.querySelector("canvas");
+      if (canvas) {
+        canvas.dispatchEvent(
+          new frameWindow.MouseEvent("click", {
+            bubbles: true,
+            cancelable: true,
+            clientX: 24,
+            clientY: 24
+          })
+        );
+        frameWindow.focus();
+        window.focus();
+        return true;
+      }
+      return false;
+    };
+
+    if (attemptStart()) return;
+    let tries = 0;
+    const timer = window.setInterval(() => {
+      tries += 1;
+      if (attemptStart() || tries >= 14) {
+        window.clearInterval(timer);
+      }
+    }, 450);
+
+    try {
+      iframe.contentWindow?.focus();
     } catch {
       // Keep silent if the packager output isolates internals.
     }
@@ -305,28 +329,38 @@ export default function App() {
     }
   }
 
-  async function quickPackageFromInbox() {
+  async function verifyAdminPassword() {
     if (adminPackaging) return;
     setAdminPackaging(true);
-    setAdminMessage("Packaging inbox en cours...");
+    setAdminMessage("");
     try {
-      const response = await fetch(`${API_BASE}/admin/package-inbox`, {
+      const response = await fetch(`${API_BASE}/admin/verify`, {
         method: "POST",
         headers: {
-          "x-admin-password": ADMIN_KIOSK_PASSWORD
+          "x-admin-password": adminPassword
         }
       });
       const data = await response.json();
       if (!response.ok || !data.ok) {
-        throw new Error(data.error || "Packaging inbox impossible.");
+        throw new Error(data.error || "Mot de passe invalide.");
       }
-      setAdminMessage(`Import OK: ${data?.game?.title || data?.source || "jeu ajoute"}`);
-      await fetchGames();
+      setAdminAuthenticated(true);
+      setAdminMessage("Admin authentifie.");
+      playTone(860, 0.07, 0.04);
     } catch (err) {
       setAdminMessage(err.message);
     } finally {
       setAdminPackaging(false);
     }
+  }
+
+  function closeAdminModal() {
+    setShowAdminModal(false);
+    setAdminAuthenticated(false);
+    setAdminPassword("");
+    setAdminProjectFile(null);
+    setAdminProjectUrl("");
+    setAdminMessage("");
   }
 
   function toggleFavorite(gameId) {
@@ -356,7 +390,7 @@ export default function App() {
   }
 
   return (
-    <main className="arcade-root">
+    <main className={`arcade-root ${showAdminModal ? "allow-mouse" : ""}`}>
       <section className="scanline-overlay" aria-hidden />
       <section className="content">
         {loadingGame && (
@@ -393,6 +427,7 @@ export default function App() {
                   <p><span className="kbd">F5 / R</span>Recharger le jeu</p>
                   <p><span className="kbd">F10 / Q</span>Quitter au launcher</p>
                   <p><span className="kbd">F9 / H</span>Afficher/Masquer aide</p>
+                  <p><span className="kbd">G</span>Relancer auto-start drapeau</p>
                   <p><span className="kbd">F12</span>Sortie de secours</p>
                   <p><span className="kbd">Souris</span>Bloquee</p>
                 </aside>
@@ -457,20 +492,10 @@ export default function App() {
                   <p><span className="kbd">Enter</span>Lancer jeu</p>
                   <p><span className="kbd">F</span>Favori</p>
                   <p><span className="kbd">R/F5</span>Actualiser liste</p>
-                  <p><span className="kbd">A</span>Ouvrir admin packager</p>
-                  <h3>Admin borne sans souris</h3>
-                  <p><span className="kbd">↑↑↓↓←→←→+Enter</span>Debloquer admin</p>
-                  <p><span className="kbd">P</span>Packager dernier /imports</p>
-                  <p><span className="kbd">L</span>Reverrouiller admin</p>
-                  {adminUnlocked && <p><span className="kbd">Etat</span>Admin actif</p>}
-                  {!!adminMessage && <p><span className="kbd">Info</span>{adminMessage}</p>}
+                  <p><span className="kbd">Alt+Shift</span>Ouvrir menu admin</p>
                 </aside>
               </div>
             )}
-
-            <button className="admin-fab" type="button" onClick={() => setShowAdminModal(true)}>
-              Ajouter un jeu (admin)
-            </button>
           </>
         )}
       </section>
@@ -482,23 +507,27 @@ export default function App() {
             <p className="subtitle">TurboWarp Packager simplifie: export force en HTML.</p>
             <label>Mot de passe admin</label>
             <input type="password" value={adminPassword} onChange={(e) => setAdminPassword(e.target.value)} />
-            <div className="source-switch">
-              <button type="button" className={adminSourceMode === "file" ? "primary" : "secondary"} onClick={() => setAdminSourceMode("file")}>
-                Fichier .sb2/.sb3
-              </button>
-              <button type="button" className={adminSourceMode === "url" ? "primary" : "secondary"} onClick={() => setAdminSourceMode("url")}>
-                URL projet
-              </button>
-            </div>
-            {adminSourceMode === "file" ? (
-              <input type="file" accept=".sb2,.sb3" onChange={(e) => setAdminProjectFile(e.target.files?.[0] || null)} />
-            ) : (
-              <input
-                type="url"
-                placeholder="https://..."
-                value={adminProjectUrl}
-                onChange={(e) => setAdminProjectUrl(e.target.value)}
-              />
+            {!adminAuthenticated ? null : (
+              <>
+                <div className="source-switch">
+                  <button type="button" className={adminSourceMode === "file" ? "primary" : "secondary"} onClick={() => setAdminSourceMode("file")}>
+                    Fichier .sb2/.sb3
+                  </button>
+                  <button type="button" className={adminSourceMode === "url" ? "primary" : "secondary"} onClick={() => setAdminSourceMode("url")}>
+                    URL projet
+                  </button>
+                </div>
+                {adminSourceMode === "file" ? (
+                  <input type="file" accept=".sb2,.sb3" onChange={(e) => setAdminProjectFile(e.target.files?.[0] || null)} />
+                ) : (
+                  <input
+                    type="url"
+                    placeholder="https://..."
+                    value={adminProjectUrl}
+                    onChange={(e) => setAdminProjectUrl(e.target.value)}
+                  />
+                )}
+              </>
             )}
             <p className="subtitle">
               Repo packager:{" "}
@@ -508,10 +537,16 @@ export default function App() {
             </p>
             {!!adminMessage && <div className="loading-card">{adminMessage}</div>}
             <div className="actions">
-              <button className="primary" type="button" disabled={adminPackaging} onClick={handleAdminPackage}>
-                {adminPackaging ? "Packaging..." : "Packager et ajouter"}
-              </button>
-              <button className="secondary" type="button" onClick={() => setShowAdminModal(false)}>
+              {!adminAuthenticated ? (
+                <button className="primary" type="button" disabled={adminPackaging} onClick={verifyAdminPassword}>
+                  {adminPackaging ? "Verification..." : "Valider mot de passe"}
+                </button>
+              ) : (
+                <button className="primary" type="button" disabled={adminPackaging} onClick={handleAdminPackage}>
+                  {adminPackaging ? "Packaging..." : "Packager et ajouter"}
+                </button>
+              )}
+              <button className="secondary" type="button" onClick={closeAdminModal}>
                 Fermer
               </button>
             </div>

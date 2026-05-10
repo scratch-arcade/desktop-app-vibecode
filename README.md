@@ -76,10 +76,12 @@ Le backend utilise `@turbowarp/packager` et force un export `text/html`.
 
 ### Admin borne sans souris (recommande)
 
-1. Deposer un fichier `.sb3` ou `.sb2` dans `imports/`
-2. Dans le launcher: entrer la sequence `↑ ↑ ↓ ↓ ← → ← → Enter`
-3. Appuyer sur `P` pour packager automatiquement le dernier fichier de `imports/`
-4. Appuyer sur `L` pour verrouiller le mode admin
+1. Depuis le launcher, appuyer sur `Alt+Shift`
+2. Entrer le mot de passe admin
+3. Choisir un fichier `.sb3/.sb2` ou une URL
+4. Lancer `Packager et ajouter`
+
+La souris est reactvee seulement pendant le menu admin, puis re-desactivee a la fermeture.
 
 ## Installation
 

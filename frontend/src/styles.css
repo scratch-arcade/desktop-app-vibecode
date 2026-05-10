@@ -26,6 +26,11 @@ body,
   cursor: none !important;
 }
 
+body.allow-mouse,
+body.allow-mouse * {
+  cursor: auto !important;
+}
+
 .arcade-root {
   position: relative;
   width: 100%;

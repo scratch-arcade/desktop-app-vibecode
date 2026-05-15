@@ -5,7 +5,7 @@ Projet de borne arcade moderne pour Windows, sans Electron, avec:
 - backend Node.js pour scanner/lancer les jeux `.html`
 - auto-start Windows
 - exemple Arduino HID (`Keyboard.h`)
-
+test
 ## Arborescence
 
 ```text

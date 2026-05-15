@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 const API_BASE = "/api";
 const FAVORITES_KEY = "arcade:favorites";
 const BOOT_DURATION_MS = 2800;
-const APP_VERSION = "v0.4.0";
+const APP_VERSION = "v0.1.6";
 const GAME_LOAD_TIMEOUT_MS = 15000;
 const PACKAGER_REPO_URL = "https://github.com/TurboWarp/packager";
 
